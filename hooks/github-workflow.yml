@@ -1,0 +1,232 @@
+name: FCM Repository Validation
+# GitHub Actions workflow implementing Layer 4 Git integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly repository health check
+    - cron: '0 0 * * 0'
+
+jobs:
+  validate-repository:
+    runs-on: ubuntu-latest
+    name: Repository Structure & Compliance Validation
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for comprehensive analysis
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install jsonschema pyyaml
+    
+    - name: Validate Repository Structure
+      id: structure
+      run: |
+        cd repository-validator
+        python validators/repo_validator.py .. --json > validation_result.json
+        cat validation_result.json
+        
+        # Extract key metrics
+        SCORE=$(jq -r '.score' validation_result.json)
+        LEVEL=$(jq -r '.compliance_level' validation_result.json)
+        VIOLATIONS=$(jq -r '.violations | length' validation_result.json)
+        
+        echo "score=$SCORE" >> $GITHUB_OUTPUT
+        echo "compliance_level=$LEVEL" >> $GITHUB_OUTPUT
+        echo "violations_count=$VIOLATIONS" >> $GITHUB_OUTPUT
+        
+        # Set step status based on score
+        if (( $(echo "$SCORE < 0.6" | bc -l) )); then
+          echo "Repository validation failed with score: $SCORE"
+          exit 1
+        fi
+    
+    - name: Generate Health Report
+      if: always()
+      run: |
+        cd repository-validator
+        python monitoring/health_report.py .. --format markdown > ../VALIDATION_REPORT.md
+    
+    - name: Upload Validation Report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: validation-report
+        path: VALIDATION_REPORT.md
+    
+    - name: Comment PR with Results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const result = JSON.parse(fs.readFileSync('repository-validator/validation_result.json', 'utf8'));
+          
+          let comment = `## 🔍 FCM Repository Validation Results\n\n`;
+          comment += `**Score:** ${result.score.toFixed(2)} | **Level:** ${result.compliance_level}\n\n`;
+          
+          if (result.violations.length > 0) {
+            comment += `### ❌ Violations (${result.violations.length})\n`;
+            result.violations.forEach(v => comment += `- ${v}\n`);
+            comment += `\n`;
+          }
+          
+          if (result.recommendations.length > 0) {
+            comment += `### 💡 Recommendations\n`;
+            result.recommendations.forEach(r => comment += `- ${r}\n`);
+            comment += `\n`;
+          }
+          
+          comment += `### 📊 Health Metrics\n`;
+          Object.entries(result.health_metrics).forEach(([key, value]) => {
+            comment += `- **${key.replace('_', ' ')}:** ${value.toFixed(2)}\n`;
+          });
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+    
+    - name: Fail on Critical Issues
+      if: steps.structure.outputs.score < '0.4'
+      run: |
+        echo "❌ Repository score below critical threshold (0.4)"
+        echo "This indicates fundamental structural issues that must be addressed."
+        exit 1
+
+  validate-fcm-models:
+    runs-on: ubuntu-latest
+    name: FCM Model Format Validation
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Validate FCM Models
+      run: |
+        # Find all FCM model files
+        find . -name "fcm.*.md" -type f > fcm_models.txt
+        
+        if [ ! -s fcm_models.txt ]; then
+          echo "ℹ️ No FCM models found to validate"
+          exit 0
+        fi
+        
+        echo "📋 Found $(wc -l < fcm_models.txt) FCM model(s) to validate"
+        
+        # Basic FCM format validation
+        ERRORS=0
+        while IFS= read -r model; do
+          echo "Validating: $model"
+          
+          # Check for Model ID
+          if ! grep -q "Model ID\|model_id:" "$model"; then
+            echo "❌ $model: Missing Model ID"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Check for Layer structure
+          if ! grep -q "## Layer 1:" "$model"; then
+            echo "❌ $model: Missing FCM layer structure"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          # Check for Pattern Variables
+          if ! grep -q "Pattern Variables\|pattern_variables:" "$model"; then
+            echo "⚠️ $model: Missing pattern variables (recommended)"
+          fi
+          
+        done < fcm_models.txt
+        
+        if [ $ERRORS -gt 0 ]; then
+          echo "❌ Found $ERRORS FCM format errors"
+          exit 1
+        else
+          echo "✅ All FCM models pass format validation"
+        fi
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security & Dependency Scan
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Run Security Scan
+      uses: github/super-linter@v5
+      env:
+        DEFAULT_BRANCH: main
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VALIDATE_ALL_CODEBASE: true
+        VALIDATE_JSON: true
+        VALIDATE_MARKDOWN: true
+        VALIDATE_YAML: true
+    
+    - name: Check for Security Policy
+      run: |
+        if [ ! -f "SECURITY.md" ] && [ ! -f ".github/SECURITY.md" ]; then
+          echo "⚠️ No security policy found"
+          echo "Consider adding SECURITY.md with vulnerability reporting instructions"
+        else
+          echo "✅ Security policy found"
+        fi
+
+  generate-badge:
+    runs-on: ubuntu-latest
+    name: Generate Compliance Badge
+    needs: [validate-repository]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Generate Compliance Badge
+      run: |
+        SCORE="${{ needs.validate-repository.outputs.score }}"
+        LEVEL="${{ needs.validate-repository.outputs.compliance_level }}"
+        
+        # Generate badge URL based on compliance level
+        if (( $(echo "$SCORE >= 0.9" | bc -l) )); then
+          BADGE_COLOR="brightgreen"
+        elif (( $(echo "$SCORE >= 0.7" | bc -l) )); then
+          BADGE_COLOR="green"
+        elif (( $(echo "$SCORE >= 0.5" | bc -l) )); then
+          BADGE_COLOR="yellow"
+        else
+          BADGE_COLOR="red"
+        fi
+        
+        BADGE_URL="https://img.shields.io/badge/FCM%20Compliance-${LEVEL}%20(${SCORE})-${BADGE_COLOR}"
+        
+        # Update README if badge placeholder exists
+        if grep -q "fcm-compliance-badge" README.md; then
+          sed -i "s|.*fcm-compliance-badge.*|![FCM Compliance](${BADGE_URL})|" README.md
+          
+          # Commit badge update
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git diff --staged --quiet || git commit -m "Update FCM compliance badge [skip ci]"
+          git push
+        fi

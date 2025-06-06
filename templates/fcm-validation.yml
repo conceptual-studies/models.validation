@@ -1,0 +1,41 @@
+name: FCM Repository Validation
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Validate FCM compliance
+      uses: fcm-community/models.validation@v1
+      with:
+        repository-type: 'auto'  # Auto-detect from fcm.manifest.json
+        min-score: '0.7'         # Adjust based on repository type
+        fail-on-violations: 'false'
+        create-badge: 'true'
+        comment-on-pr: 'true'
+    
+    - name: Upload validation report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: validation-report
+        path: validation_result.json
+        retention-days: 30
+    
+    - name: Update compliance badge
+      if: success()
+      run: |
+        echo "Repository validated successfully!"
+        echo "Score: ${{ steps.validate.outputs.score }}"
+        echo "Grade: ${{ steps.validate.outputs.health-grade }}"

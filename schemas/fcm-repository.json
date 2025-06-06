@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "https://formal-conceptual-models.org/schemas/repository-validation.json",
+  "title": "FCM Repository Validation Schema",
+  "description": "Schema for validating FCM repository structure and compliance",
+  "type": "object",
+  
+  "properties": {
+    "repository_type": {
+      "type": "string",
+      "enum": ["framework", "systems", "domains", "works", "projects", "lab", "personal"],
+      "description": "Type of FCM repository"
+    },
+    
+    "required_directories": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Directories that must exist in repository"
+    },
+    
+    "required_files": {
+      "type": "array", 
+      "items": {"type": "string"},
+      "description": "Files that must exist in repository root"
+    },
+    
+    "naming_conventions": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "string",
+          "enum": ["kebab-case", "snake_case", "camelCase", "PascalCase"],
+          "default": "kebab-case"
+        },
+        "directories": {
+          "type": "string", 
+          "enum": ["lowercase", "kebab-case", "snake_case"],
+          "default": "lowercase"
+        },
+        "models": {
+          "type": "string",
+          "pattern": "^fcm\\.[a-z]+(-[a-z]+)*\\.md$",
+          "description": "FCM model file naming pattern"
+        }
+      }
+    },
+    
+    "content_requirements": {
+      "type": "object",
+      "properties": {
+        "README.md": {
+          "type": "object",
+          "properties": {
+            "required_sections": {
+              "type": "array",
+              "items": {"type": "string"},
+              "default": ["title", "description", "usage"]
+            },
+            "min_length": {"type": "integer", "default": 100}
+          }
+        },
+        "fcm.manifest.json": {
+          "type": "object",
+          "properties": {
+            "required_fields": {
+              "type": "array",
+              "items": {"type": "string"},
+              "default": ["type", "category", "name", "version", "exports"]
+            },
+            "cmi_compliance": {"type": "boolean", "default": true}
+          }
+        },
+        "models": {
+          "type": "object",
+          "properties": {
+            "fcm_format": {"type": "boolean", "default": true},
+            "universal_pattern": {"type": "boolean", "default": true},
+            "model_id_format": {"type": "string", "pattern": "^[a-z]+\\.[a-z]+.*"}
+          }
+        }
+      }
+    },
+    
+    "compliance_levels": {
+      "type": "object",
+      "properties": {
+        "0": {
+          "description": "Basic - README and LICENSE exist",
+          "requirements": ["README.md", "LICENSE"]
+        },
+        "1": {
+          "description": "Structured - proper directory hierarchy",
+          "requirements": ["proper_structure", "manifest"]
+        },
+        "2": {
+          "description": "Documented - complete documentation",
+          "requirements": ["complete_readme", "model_documentation"]
+        },
+        "3": {
+          "description": "Tested - validation present",
+          "requirements": ["validation_scripts", "compliance_checks"]
+        },
+        "4": {
+          "description": "Secure - security policies implemented", 
+          "requirements": ["security_policy", "dependency_scanning"]
+        },
+        "5": {
+          "description": "Exemplary - organizational best practices",
+          "requirements": ["automation", "monitoring", "excellence"]
+        }
+      }
+    },
+    
+    "validation_rules": {
+      "type": "object",
+      "properties": {
+        "structural": {
+          "weight": 0.3,
+          "checks": ["directories", "files", "naming"]
+        },
+        "content": {
+          "weight": 0.3, 
+          "checks": ["documentation", "models", "manifest"]
+        },
+        "process": {
+          "weight": 0.2,
+          "checks": ["ci_cd", "automation", "workflows"]
+        },
+        "security": {
+          "weight": 0.2,
+          "checks": ["policies", "scanning", "access_control"]
+        }
+      }
+    }
+  },
+  
+  "repository_schemas": {
+    "framework": {
+      "required_directories": ["core", "composite", "bridges", "templates"],
+      "required_files": ["README.md", "CHANGELOG.md", "fcm.manifest.json"],
+      "special_requirements": {
+        "universal_pattern_compliance": true,
+        "framework_purity": true,
+        "no_implementations": true
+      }
+    },
+    
+    "systems": {
+      "required_directories": ["analytical", "empirical", "exports"],
+      "required_files": ["README.md", "fcm.manifest.json"],
+      "special_requirements": {
+        "cmi_implementation": true,
+        "working_systems": true,
+        "core_dependencies": true
+      }
+    },
+    
+    "domains": {
+      "required_directories": ["models", "schemas"],
+      "required_files": ["README.md", "fcm.manifest.json"],
+      "special_requirements": {
+        "domain_coherence": true,
+        "cross_references": true,
+        "expert_validation": true
+      }
+    },
+    
+    "works": {
+      "required_directories": ["formal", "informal", "transformations"],
+      "required_files": ["README.md", "fcm.manifest.json"],
+      "special_requirements": {
+        "original_preservation": true,
+        "transformation_tracking": true,
+        "citation_compliance": true
+      }
+    },
+    
+    "projects": {
+      "required_directories": ["models", "implementations", "case-studies"],
+      "required_files": ["README.md", "fcm.manifest.json"],
+      "special_requirements": {
+        "practical_application": true,
+        "multiple_repo_deps": true,
+        "real_world_usage": true
+      }
+    },
+    
+    "lab": {
+      "required_directories": ["experiments", "proposals"],
+      "required_files": ["README.md", "fcm.manifest.json"],
+      "special_requirements": {
+        "experimental_nature": true,
+        "graduation_criteria": true,
+        "rapid_iteration": true
+      }
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0.0",
+  "manifest": {
+    "name": "models.validation",
+    "version": "1.0.0",
+    "description": "Formal validation framework for FCM repositories",
+    "category": "tools",
+    "type": "validation-framework",
+    "model_id": "tools.validation.framework"
+  },
+  "metadata": {
+    "created": "2024-01-06",
+    "modified": "2024-01-06",
+    "authors": ["FCM Community"],
+    "license": "MIT",
+    "tags": ["validation", "compliance", "health-monitoring", "github-actions"]
+  },
+  "structure": {
+    "directories": {
+      "validators/": "Core validation logic implementing Layer 3 algorithms",
+      "schemas/": "Repository type schemas and validation rules",
+      "monitoring/": "Compliance scoring and health monitoring (Layer 4)",
+      "hooks/": "Git hooks for local validation",
+      "actions/": "GitHub Actions workflow templates",
+      "docs/": "Implementation guides and API documentation",
+      "templates/": "Repository templates and examples"
+    },
+    "key_files": {
+      "validators/repo_validator.py": "Main repository validation engine",
+      "validators/fcm_validator.py": "FCM model format validator",
+      "schemas/fcm-repository.json": "Repository structure schema",
+      "monitoring/compliance_scorer.py": "Health scoring system",
+      "actions/fcm-validation.yml": "GitHub Actions workflow template"
+    }
+  },
+  "interface": {
+    "api_version": "3.0.0",
+    "compatibility_function": "Res(Repository, Validator; compliance_level, health_score, violations)",
+    "cmi_specification": "composite.interface.cmi.v3.0",
+    "supported_repositories": [
+      "framework",
+      "systems", 
+      "domains",
+      "works",
+      "projects",
+      "lab",
+      "personal"
+    ],
+    "validation_layers": {
+      "structural": "Directory and file structure validation",
+      "content": "Model format and documentation validation",
+      "process": "CI/CD and automation validation",
+      "security": "Security policies and scanning validation"
+    }
+  },
+  "dependencies": {
+    "runtime": {
+      "python": ">=3.7",
+      "pyyaml": ">=5.0",
+      "jsonschema": ">=3.0"
+    },
+    "development": {
+      "pytest": ">=6.0",
+      "black": ">=22.0",
+      "mypy": ">=0.900"
+    }
+  },
+  "usage": {
+    "github_action": {
+      "example": "uses: fcm-community/models.validation@v1",
+      "inputs": ["repository-type", "compliance-threshold"]
+    },
+    "local_validation": {
+      "install": "pip install fcm-validator",
+      "command": "fcm-validate . --type framework"
+    },
+    "pre_commit_hook": {
+      "install": "cp hooks/pre-commit .git/hooks/",
+      "behavior": "Validates FCM compliance before commit"
+    }
+  },
+  "resonance_profile": {
+    "entry_points": ["validators/repo_validator.py", "GitHub Actions"],
+    "core_patterns": ["layer-3-algorithms", "health-monitoring", "compliance-scoring"],
+    "evolution": {
+      "trajectory": "Toward self-improving validation through usage patterns",
+      "learning": "Collects anonymized validation metrics for rule refinement"
+    }
+  }
+}

@@ -1,0 +1,113 @@
+#!/bin/bash
+#
+# FCM Repository Pre-Commit Hook
+# Implements Git layer validation from Layer 4 of the GitHub Repository Model
+#
+
+set -e
+
+# Configuration
+VALIDATOR_PATH="$(git rev-parse --show-toplevel)/repository-validator/validators/repo_validator.py"
+MIN_SCORE=0.6
+BLOCK_ON_VIOLATIONS=true
+
+echo "🔍 FCM Repository Validation (Pre-Commit)"
+echo "=========================================="
+
+# Check if we have Python available
+PYTHON_CMD=""
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_CMD="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_CMD="python"
+else
+    echo "⚠️  Python not available in local environment"
+    echo "🚀 Validation will run in GitHub Actions instead"
+    echo "💡 To enable local validation: install Python 3.7+"
+    echo "✅ Pre-commit check skipped (GitHub Actions will validate)"
+    exit 0
+fi
+
+# Check if validator exists
+if [ ! -f "$VALIDATOR_PATH" ]; then
+    echo "❌ Validator not found at: $VALIDATOR_PATH"
+    echo "💡 Run: ./repository-validator/hooks/install.sh"
+    exit 1
+fi
+
+# Check Python dependencies
+if ! $PYTHON_CMD -c "import json, pathlib" >/dev/null 2>&1; then
+    echo "⚠️  Python dependencies not available"
+    echo "🚀 Validation will run in GitHub Actions instead"
+    echo "💡 To enable local validation: pip install jsonschema pyyaml"
+    echo "✅ Pre-commit check skipped (GitHub Actions will validate)"
+    exit 0
+fi
+
+# Get repository root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Run validation
+echo "📋 Validating repository structure..."
+RESULT=$($PYTHON_CMD "$VALIDATOR_PATH" "$REPO_ROOT" --json)
+
+# Check if jq is available for JSON parsing
+if ! command -v jq >/dev/null 2>&1; then
+    echo "⚠️  jq not available for JSON parsing"
+    echo "🚀 Validation will run in GitHub Actions instead"
+    echo "💡 To enable local validation: install jq"
+    echo "✅ Pre-commit check skipped (GitHub Actions will validate)"
+    exit 0
+fi
+
+# Parse results
+SCORE=$(echo "$RESULT" | jq -r '.score')
+COMPLIANCE_LEVEL=$(echo "$RESULT" | jq -r '.compliance_level')
+VIOLATIONS_COUNT=$(echo "$RESULT" | jq -r '.violations | length')
+
+echo "📊 Score: $SCORE"
+echo "🎯 Compliance Level: $COMPLIANCE_LEVEL"
+
+# Check if score meets minimum requirement
+if (( $(echo "$SCORE < $MIN_SCORE" | bc -l) )); then
+    echo "❌ Repository score ($SCORE) below minimum requirement ($MIN_SCORE)"
+    
+    if [ "$BLOCK_ON_VIOLATIONS" = true ]; then
+        echo ""
+        echo "🚫 COMMIT BLOCKED - Fix violations before committing"
+        echo ""
+        echo "Violations:"
+        echo "$RESULT" | jq -r '.violations[]' | sed 's/^/  ❌ /'
+        echo ""
+        echo "Recommendations:"
+        echo "$RESULT" | jq -r '.recommendations[]' | sed 's/^/  💡 /'
+        echo ""
+        echo "To bypass this check (not recommended): git commit --no-verify"
+        exit 1
+    else
+        echo "⚠️  WARNING: Repository has compliance issues"
+    fi
+fi
+
+# Show violations if any
+if [ "$VIOLATIONS_COUNT" -gt 0 ]; then
+    echo ""
+    echo "⚠️  Found $VIOLATIONS_COUNT violation(s):"
+    echo "$RESULT" | jq -r '.violations[]' | sed 's/^/  ⚠️  /'
+    echo ""
+fi
+
+echo "✅ Pre-commit validation passed"
+echo ""
+
+# Optional: Auto-fix simple issues
+if [ -n "$PYTHON_CMD" ]; then
+    FIX_SCRIPT="$REPO_ROOT/repository-validator/remediation/auto_fix.py"
+    if [ -f "$FIX_SCRIPT" ]; then
+        echo "🔧 Running auto-remediation..."
+        $PYTHON_CMD "$FIX_SCRIPT" "$REPO_ROOT" --safe-only
+        echo ""
+    fi
+fi
+
+exit 0

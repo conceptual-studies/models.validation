@@ -1,0 +1,131 @@
+name: 'FCM Repository Validator'
+description: 'Validate FCM repository compliance and health'
+author: 'FCM Community'
+
+inputs:
+  repository-type:
+    description: 'Type of FCM repository (framework, systems, domains, works, projects, lab, personal)'
+    required: false
+    default: 'auto'
+  min-score:
+    description: 'Minimum acceptable validation score (0.0-1.0)'
+    required: false
+    default: '0.7'
+  fail-on-violations:
+    description: 'Fail if any violations found'
+    required: false
+    default: 'false'
+  create-badge:
+    description: 'Create compliance badge'
+    required: false
+    default: 'true'
+  comment-on-pr:
+    description: 'Comment validation results on PR'
+    required: false
+    default: 'true'
+
+outputs:
+  score:
+    description: 'Overall validation score'
+  compliance-level:
+    description: 'Compliance level achieved'
+  violations-count:
+    description: 'Number of violations found'
+  health-grade:
+    description: 'Repository health grade'
+  badge-url:
+    description: 'URL to compliance badge'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml jsonschema
+    
+    - name: Run validation
+      id: validate
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}
+        
+        # Determine repository type
+        REPO_TYPE="${{ inputs.repository-type }}"
+        if [ "$REPO_TYPE" = "auto" ]; then
+          REPO_TYPE=$(python validators/repo_validator.py ${{ github.workspace }} --detect-type)
+        fi
+        
+        # Run validation
+        python validators/repo_validator.py ${{ github.workspace }} \
+          --type $REPO_TYPE \
+          --json > validation_result.json
+        
+        # Extract results
+        SCORE=$(jq -r '.score' validation_result.json)
+        LEVEL=$(jq -r '.compliance_level' validation_result.json)
+        VIOLATIONS=$(jq -r '.violations | length' validation_result.json)
+        GRADE=$(jq -r '.health_metrics.overall_health' validation_result.json)
+        
+        # Set outputs
+        echo "score=$SCORE" >> $GITHUB_OUTPUT
+        echo "compliance_level=$LEVEL" >> $GITHUB_OUTPUT
+        echo "violations_count=$VIOLATIONS" >> $GITHUB_OUTPUT
+        echo "health_grade=$GRADE" >> $GITHUB_OUTPUT
+        
+        # Check minimum score
+        if (( $(echo "$SCORE < ${{ inputs.min-score }}" | bc -l) )); then
+          echo "❌ Validation failed with score: $SCORE (minimum: ${{ inputs.min-score }})"
+          exit 1
+        fi
+        
+        # Check violations
+        if [ "${{ inputs.fail-on-violations }}" = "true" ] && [ "$VIOLATIONS" -gt 0 ]; then
+          echo "❌ Validation failed with $VIOLATIONS violations"
+          exit 1
+        fi
+        
+        echo "✅ Validation passed with score: $SCORE"
+    
+    - name: Create badge
+      if: inputs.create-badge == 'true'
+      shell: bash
+      run: |
+        # Badge creation logic here
+        echo "badge-url=https://img.shields.io/badge/FCM-${{ steps.validate.outputs.health-grade }}-green" >> $GITHUB_OUTPUT
+    
+    - name: Comment on PR
+      if: github.event_name == 'pull_request' && inputs.comment-on-pr == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const score = '${{ steps.validate.outputs.score }}';
+          const level = '${{ steps.validate.outputs.compliance_level }}';
+          const violations = '${{ steps.validate.outputs.violations_count }}';
+          const grade = '${{ steps.validate.outputs.health_grade }}';
+          
+          const comment = `## FCM Repository Validation Results
+          
+          - **Score**: ${score}
+          - **Compliance Level**: ${level}
+          - **Violations**: ${violations}
+          - **Health Grade**: ${grade}
+          
+          View full report in the workflow logs.`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+branding:
+  icon: 'check-circle'
+  color: 'green'
